@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - fork release (mlyczko)
+
+Fork of [darksider4all/homelab-netatmo-integration](https://github.com/darksider4all/homelab-netatmo-integration).
+No breaking changes to the `netatmo_custom` domain or entity unique-id scheme.
+
+### Fixed
+- Added the previously-missing `icons.json`, so preset-mode buttons on the thermostat card show
+  icons instead of rendering blank.
+- Netatmo's `max` therm_setpoint_mode now maps to a real `boost` preset (verified via
+  `async_set_room_thermpoint(mode="max")`) instead of silently falling back to `schedule`, which
+  previously made selecting it snap back to Home/Schedule.
+- Renamed the `home` preset to `schedule` and reordered preset modes to
+  `[away, boost, frost_guard, schedule]` to match the original Netatmo integration's naming, icon
+  set, and button order.
+
 ## [1.2.0] - Unreleased
 
 Production-hardening release. No breaking changes — the `netatmo_custom` domain and the
