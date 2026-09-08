@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature
 from homeassistant.components.climate.const import (
     PRESET_AWAY,
-    PRESET_HOME,
+    PRESET_BOOST,
     PRESET_NONE,
     HVACAction,
     HVACMode,
@@ -28,6 +28,7 @@ from .const import (
     MAX_TEMP,
     MIN_TEMP,
     PRESET_FROST_GUARD,
+    PRESET_SCHEDULE,
     TEMP_STEP,
     VERIFY_MAX_RETRIES,
     VERIFY_PROPAGATION_DELAY,
@@ -127,9 +128,10 @@ def _get_room_status(data: dict, room_id: str) -> dict | None:
 
 
 PRESET_MODE_ICONS = {
-    PRESET_HOME: "mdi:home-thermometer",
+    PRESET_SCHEDULE: "mdi:clock-outline",
     PRESET_AWAY: "mdi:home-export-outline",
     PRESET_FROST_GUARD: "mdi:snowflake-thermometer",
+    PRESET_BOOST: "mdi:rocket-launch",
     PRESET_NONE: "mdi:thermostat",
 }
 
@@ -201,10 +203,10 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
         # Supported modes
         self._attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO, HVACMode.OFF]
         self._attr_preset_modes = [
-            PRESET_HOME,
             PRESET_AWAY,
+            PRESET_BOOST,
             PRESET_FROST_GUARD,
-            PRESET_NONE,
+            PRESET_SCHEDULE,
         ]
 
     @property
@@ -288,12 +290,14 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
 
         # Map Netatmo room setpoint modes to HA presets
         if setpoint_mode == "schedule":
-            return PRESET_HOME
+            return PRESET_SCHEDULE
         elif setpoint_mode == "away":
             return PRESET_AWAY
         elif setpoint_mode in ("hg", "frost guard"):
             return PRESET_FROST_GUARD
-        # off, manual, max, or unknown modes
+        elif setpoint_mode == "max":
+            return PRESET_BOOST
+        # off, manual, or unknown modes
         return PRESET_NONE
 
     @property
@@ -430,16 +434,14 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
         """Set preset mode."""
         api: NetatmoAPI = self.coordinator.api
 
-        # Map HA presets to Netatmo modes
+        # Map HA presets to Netatmo home-level modes (boost is room-level, handled separately)
         mode_map = {
-            PRESET_HOME: "schedule",
+            PRESET_SCHEDULE: "schedule",
             PRESET_AWAY: "away",
             PRESET_FROST_GUARD: "hg",
-            PRESET_NONE: "schedule",
         }
 
-        netatmo_mode = mode_map.get(preset_mode)
-        if not netatmo_mode:
+        if preset_mode != PRESET_BOOST and preset_mode not in mode_map:
             return
 
         # Set optimistic state for immediate UI feedback
@@ -447,7 +449,12 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
         self.async_write_ha_state()
 
         async def api_call():
-            await api.async_set_therm_mode(self._home_id, mode=netatmo_mode)
+            if preset_mode == PRESET_BOOST:
+                await api.async_set_room_thermpoint(
+                    self._home_id, self._room_id, mode="max"
+                )
+            else:
+                await api.async_set_therm_mode(self._home_id, mode=mode_map[preset_mode])
 
         def verify() -> bool:
             # Check actual state (not optimistic)
@@ -457,10 +464,12 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
             actual_mode = room_status.get("therm_setpoint_mode")
             if preset_mode == PRESET_FROST_GUARD:
                 return actual_mode in ("hg", "frost guard")
-            elif preset_mode in (PRESET_HOME, PRESET_NONE):
+            elif preset_mode == PRESET_SCHEDULE:
                 return actual_mode == "schedule"
             elif preset_mode == PRESET_AWAY:
                 return actual_mode == "away"
+            elif preset_mode == PRESET_BOOST:
+                return actual_mode == "max"
             return False
 
         try:

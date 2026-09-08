@@ -34,9 +34,10 @@
         "state_attributes": {
           "preset_mode": {
             "state": {
-              "home": "Home",
               "away": "Away",
+              "boost": "Boost",
               "frost_guard": "Frost Guard",
+              "schedule": "Schedule",
               "none": "None"
             }
           }

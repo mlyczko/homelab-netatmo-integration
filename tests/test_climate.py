@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.components.climate.const import (
     PRESET_AWAY,
-    PRESET_HOME,
+    PRESET_BOOST,
     PRESET_NONE,
     HVACAction,
     HVACMode,
@@ -13,7 +13,7 @@ from homeassistant.components.climate.const import (
 import pytest
 
 from custom_components.netatmo_custom.climate import NetatmoThermostat, async_setup_entry
-from custom_components.netatmo_custom.const import PRESET_FROST_GUARD
+from custom_components.netatmo_custom.const import PRESET_FROST_GUARD, PRESET_SCHEDULE
 
 
 def _make_entity(home_status, homes_data, failures=0) -> NetatmoThermostat:
@@ -41,9 +41,9 @@ def test_unique_id_is_stable(entity):
 
 
 def test_schedule_mode_maps_to_auto_home(entity):
-    """Schedule mode -> AUTO / PRESET_HOME."""
+    """Schedule mode -> AUTO / PRESET_SCHEDULE."""
     assert entity.hvac_mode == HVACMode.AUTO
-    assert entity.preset_mode == PRESET_HOME
+    assert entity.preset_mode == PRESET_SCHEDULE
 
 
 def test_temperatures(entity):
@@ -262,8 +262,8 @@ async def test_verification_retries_on_exception(home_status, homes_data, zero_d
 
 
 def test_icon_reflects_preset(entity):
-    """The icon follows the current preset (home in the default fixture)."""
-    assert entity.icon == "mdi:home-thermometer"
+    """The icon follows the current preset (schedule in the default fixture)."""
+    assert entity.icon == "mdi:clock-outline"
 
 
 def test_no_room_status_returns_off(home_status, homes_data):
@@ -288,6 +288,13 @@ def test_away_preset_mapping(home_status, homes_data):
     _set_room_mode(home_status, "away")
     entity = _make_entity(home_status, homes_data)
     assert entity.preset_mode == PRESET_AWAY
+
+
+def test_boost_preset_mapping(home_status, homes_data):
+    """Max mode maps to the boost preset."""
+    _set_room_mode(home_status, "max")
+    entity = _make_entity(home_status, homes_data)
+    assert entity.preset_mode == PRESET_BOOST
 
 
 def test_optimistic_preset_takes_priority(entity):
@@ -405,8 +412,7 @@ async def test_set_hvac_mode_verifies_applied_mode(home_status, homes_data, zero
     [
         (PRESET_AWAY, "away"),
         (PRESET_FROST_GUARD, "hg"),
-        (PRESET_HOME, "schedule"),
-        (PRESET_NONE, "schedule"),
+        (PRESET_SCHEDULE, "schedule"),
     ],
 )
 async def test_set_preset_mode_full_verification(
@@ -424,10 +430,21 @@ async def test_set_preset_mode_full_verification(
         mode={
             PRESET_AWAY: "away",
             PRESET_FROST_GUARD: "hg",
-            PRESET_HOME: "schedule",
-            PRESET_NONE: "schedule",
+            PRESET_SCHEDULE: "schedule",
         }[preset],
     )
+    assert entity._optimistic_preset is None
+
+
+async def test_set_preset_mode_boost_uses_room_thermpoint(home_status, homes_data, zero_delays):
+    """Boost preset is applied via the room-level thermpoint endpoint with mode=max."""
+    _set_room_mode(home_status, "max")
+    api = MagicMock()
+    api.async_set_room_thermpoint = AsyncMock(return_value=None)
+    entity = _entity_with_api(home_status, homes_data, api=api)
+    entity.async_write_ha_state = MagicMock()
+    await entity.async_set_preset_mode(PRESET_BOOST)
+    api.async_set_room_thermpoint.assert_awaited_once_with("home-1", "room-1", mode="max")
     assert entity._optimistic_preset is None
 
 
