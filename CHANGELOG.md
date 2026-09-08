@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - fork release (mlyczko)
+
+### Changed
+- README HACS install instructions now point at the fork
+  (`mlyczko/homelab-netatmo-integration`) instead of the upstream repo.
+
 ## [1.3.2] - fork release (mlyczko)
 
 Fork of [darksider4all/homelab-netatmo-integration](https://github.com/darksider4all/homelab-netatmo-integration).

@@ -30,7 +30,7 @@ Custom Home Assistant integration for Netatmo Thermostats with enhanced local po
 
 1. Open HACS in Home Assistant.
 2. Click on "Integrations" -> "Custom repositories" (via the 3-dot menu).
-3. Add `https://github.com/darksider4all/homelab-netatmo-integration` as an **Integration**.
+3. Add `https://github.com/mlyczko/homelab-netatmo-integration` as an **Integration**.
 4. Click "Install".
 5. Restart Home Assistant.
 6. Go to Settings -> Devices & Services -> Add Integration -> Search for "Homelab Climate" (or Netatmo Custom).
