@@ -1,7 +1,7 @@
 {
   "domain": "netatmo_custom",
-  "name": "Homelab Climate",
-  "codeowners": ["@darksider4all"],
+  "name": "Homelab Climate (mlyczko fork)",
+  "codeowners": ["@darksider4all", "@mlyczko"],
   "config_flow": true,
   "dependencies": ["application_credentials", "webhook"],
   "documentation": "https://github.com/darksider4all/homelab-netatmo-integration",

@@ -1,8 +1,12 @@
-# Netatmo Custom Thermostat
+# Netatmo Custom Thermostat (mlyczko fork)
 
 ![Logo](custom_components/netatmo_custom/logo.png)
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+
+> This is a personal fork of [darksider4all/homelab-netatmo-integration](https://github.com/darksider4all/homelab-netatmo-integration).
+> All credit for the original integration goes to [@darksider4all](https://github.com/darksider4all) — thank you for building and
+> sharing it! This fork carries a few preset-mode/icon fixes; see [CHANGELOG.md](CHANGELOG.md) for details.
 
 Custom Home Assistant integration for Netatmo Thermostats with enhanced local polling and webhook support. This integration is designed to replace or work alongside the native Netatmo integration to provide more granular control and faster updates for climate devices.
 
