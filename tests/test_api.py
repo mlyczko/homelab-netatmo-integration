@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock
 
+import aiohttp
 import pytest
 
 from custom_components.netatmo_custom import api as api_module
@@ -128,6 +129,35 @@ async def test_token_failure_raises_auth_error(api, monkeypatch):
     """A token refresh failure surfaces as NetatmoAuthError."""
     api._oauth_session.async_ensure_token_valid = AsyncMock(side_effect=RuntimeError("no net"))
     monkeypatch.setattr(api, "_do_request", AsyncMock(return_value=(200, _ok_body(), {})))
+    with pytest.raises(NetatmoAuthError):
+        await api.async_request("POST", "homesdata")
+
+
+async def test_token_network_failure_is_transient(api, monkeypatch):
+    """A network error during token refresh (e.g. right after boot) is not an auth error."""
+    api._oauth_session.async_ensure_token_valid = AsyncMock(
+        side_effect=aiohttp.ClientConnectionError("dns not ready")
+    )
+    monkeypatch.setattr(api, "_do_request", AsyncMock(return_value=(200, _ok_body(), {})))
+    with pytest.raises(NetatmoAPIError) as exc_info:
+        await api.async_request("POST", "homesdata")
+    assert not isinstance(exc_info.value, NetatmoAuthError)
+
+
+async def test_token_network_failure_recovers(api, monkeypatch):
+    """A transient token refresh failure is retried and can then succeed."""
+    api._oauth_session.async_ensure_token_valid = AsyncMock(
+        side_effect=[aiohttp.ClientConnectionError("dns not ready"), None]
+    )
+    monkeypatch.setattr(api, "_do_request", AsyncMock(return_value=(200, _ok_body(), {})))
+    result = await api.async_request("POST", "homesdata")
+    assert result["status"] == "ok"
+
+
+async def test_token_refresh_rejected_raises_auth_error(api, monkeypatch):
+    """A 400 from the token endpoint (invalid_grant) requires reauth."""
+    err = aiohttp.ClientResponseError(MagicMock(), (), status=400)
+    api._oauth_session.async_ensure_token_valid = AsyncMock(side_effect=err)
     with pytest.raises(NetatmoAuthError):
         await api.async_request("POST", "homesdata")
 

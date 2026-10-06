@@ -136,6 +136,24 @@ class NetatmoAPI:
             # Get valid access token (refreshes automatically if expired)
             try:
                 access_token = await self.async_get_access_token()
+            except aiohttp.ClientResponseError as err:
+                # Only a rejected refresh token means reauth is needed.
+                if err.status in (400, 401, 403):
+                    _LOGGER.error("Token refresh rejected: %s", err)
+                    raise NetatmoAuthError(f"Failed to get access token: {err}") from err
+                last_error = err
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(min(INITIAL_BACKOFF * (2**attempt), MAX_BACKOFF))
+                    continue
+                break
+            except (aiohttp.ClientError, TimeoutError) as err:
+                # Network not ready yet (e.g. right after a HA restart): transient.
+                _LOGGER.warning("Token refresh failed, network may be unavailable: %s", err)
+                last_error = err
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(min(INITIAL_BACKOFF * (2**attempt), MAX_BACKOFF))
+                    continue
+                break
             except Exception as err:
                 _LOGGER.error("Failed to get access token: %s", err)
                 raise NetatmoAuthError(f"Failed to get access token: {err}") from err

@@ -92,6 +92,10 @@ async def async_setup_webhook(
             _LOGGER.exception("Unexpected error handling Netatmo webhook")
             return web.Response(status=200, text="Error processed")
 
+    # Drop any leftover registration from a failed earlier setup attempt, otherwise
+    # the retry would raise "Handler is already defined".
+    async_unregister(hass, webhook_id)
+
     # Register webhook with Home Assistant
     async_register(
         hass,
