@@ -450,9 +450,7 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
 
         async def api_call():
             if preset_mode == PRESET_BOOST:
-                await api.async_set_room_thermpoint(
-                    self._home_id, self._room_id, mode="max"
-                )
+                await api.async_set_room_thermpoint(self._home_id, self._room_id, mode="max")
             else:
                 await api.async_set_therm_mode(self._home_id, mode=mode_map[preset_mode])
 
