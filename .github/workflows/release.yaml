@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Bump version and publish release
+    runs-on: ubuntu-latest
+    # The bump commit is pushed with GITHUB_TOKEN, which does not retrigger workflows;
+    # the skip check is an extra guard against loops.
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          manifest=custom_components/netatmo_custom/manifest.json
+          current=$(jq -r .version "$manifest")
+          next="$current"
+          # Release the manifest version as-is if it was bumped by hand and is untagged,
+          # otherwise bump the patch number until the tag is free.
+          if git rev-parse -q --verify "refs/tags/v$next" >/dev/null; then
+            IFS=. read -r major minor patch <<< "$current"
+            while git rev-parse -q --verify "refs/tags/v$major.$minor.$patch" >/dev/null; do
+              patch=$((patch + 1))
+            done
+            next="$major.$minor.$patch"
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        if: steps.version.outputs.next != steps.version.outputs.current
+        run: |
+          sed -i -E 's/("version": ")[^"]+(")/\1${{ steps.version.outputs.next }}\2/' \
+            custom_components/netatmo_custom/manifest.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/netatmo_custom/manifest.json
+          git commit -m "chore: release v${{ steps.version.outputs.next }} [skip release]"
+          git push origin HEAD:master
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.next }}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "v${{ steps.version.outputs.next }}" \
+            --generate-notes
