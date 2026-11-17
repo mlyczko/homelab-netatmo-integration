@@ -30,6 +30,13 @@ TO_REDACT = {
     "id",  # IDs might be sensitive or just UUIDs, but often contain macs in Netatmo
     "home_id",
     "home_name",
+    "webhook_id",
+    "unique_id",  # embeds the home id
+    "coordinates",
+    "module_ids",  # module MAC addresses
+    "bridge",
+    "modules_bridged",
+    "room_id",
     "persons",
     "email",
 }

@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - fork release (mlyczko)
+
+### Added
+- **Reconfigure** option that re-runs the Netatmo login while keeping the home and webhook ID,
+  so Netatmo links a newly set Webhook URI without removing the integration.
+- Reauth/reconfigure abort with `wrong_account` if the logged-in account doesn't own the
+  configured home.
+
+### Security
+- Diagnostics now also redact the webhook ID, entry unique ID, home coordinates, module MAC
+  addresses (`module_ids`, `bridge`, `modules_bridged`) and `room_id`.
+
 ## [1.4.0] - fork release (mlyczko)
 
 Prepares for Netatmo's reduced polling rate limits (planned for March 1, 2027) by adopting the new

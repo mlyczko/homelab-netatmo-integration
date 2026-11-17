@@ -55,7 +55,9 @@ On startup the integration logs its webhook URL (`Settings -> System -> Logs`).
 To receive events:
 
 1. Paste that URL as the webhook URL in your app settings on [dev.netatmo.com](https://dev.netatmo.com/apps/).
-2. Re-authorize the integration (Netatmo links the webhook at authorization time).
+2. In Home Assistant open `Settings -> Devices & services -> Homelab Climate`, choose
+   **Reconfigure** from the ⋮ menu and log in to Netatmo again (Netatmo links the webhook at
+   authorization time).
 
 Once webhooks arrive, polling slows to every 5 minutes as a safety net; without them the
 integration polls every 60 seconds.

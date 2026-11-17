@@ -18,7 +18,14 @@ async def test_diagnostics_reports_coordinator_health(hass):
     coordinator.data = {"home_id": "home-1", "access_token": "super-secret", "ok": True}
 
     entry = MagicMock()
-    entry.as_dict = MagicMock(return_value={"entry_id": "entry-1", "home_id": "home-1"})
+    entry.as_dict = MagicMock(
+        return_value={
+            "entry_id": "entry-1",
+            "home_id": "home-1",
+            "unique_id": "netatmo_custom_home-1",
+            "data": {"webhook_id": "secret-webhook"},
+        }
+    )
     entry.runtime_data = SimpleNamespace(coordinator=coordinator)
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -30,5 +37,7 @@ async def test_diagnostics_reports_coordinator_health(hass):
     assert result["coordinator_health"]["data_stale"] is False
     # Sensitive values are redacted in both entry and data.
     assert result["entry"]["home_id"] == "**REDACTED**"
+    assert result["entry"]["unique_id"] == "**REDACTED**"
+    assert result["entry"]["data"]["webhook_id"] == "**REDACTED**"
     assert result["data"]["access_token"] == "**REDACTED**"
     assert result["data"]["ok"] is True

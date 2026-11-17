@@ -6,7 +6,7 @@ import secrets
 from typing import Any
 
 import aiohttp
-from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlowResult
+from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE, ConfigFlowResult
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
 import voluptuous as vol
 
@@ -71,12 +71,20 @@ class NetatmoOAuth2FlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandle
 
         _LOGGER.info("Found %d home(s) in Netatmo account", len(homes))
 
-        # Reauthentication: refresh the token on the existing entry and reload,
+        # Reauth/reconfigure: refresh the token on the existing entry and reload,
         # keeping the configured home_id and webhook_id intact.
-        if self.source == SOURCE_REAUTH:
-            reauth_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if self.source in (SOURCE_REAUTH, SOURCE_RECONFIGURE):
+            existing_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+            if not any(h.get("id") == existing_entry.data.get(CONF_HOME_ID) for h in homes):
+                return self.async_abort(reason="wrong_account")
             return self.async_update_reload_and_abort(
-                reauth_entry, data={**reauth_entry.data, **data}
+                existing_entry,
+                data={**existing_entry.data, **data},
+                reason=(
+                    "reauth_successful"
+                    if self.source == SOURCE_REAUTH
+                    else "reconfigure_successful"
+                ),
             )
 
         # Store data for next step
@@ -98,6 +106,12 @@ class NetatmoOAuth2FlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandle
         """Confirm reauthentication, then restart the OAuth flow."""
         if user_input is None:
             return self.async_show_form(step_id="reauth_confirm")
+        return await self.async_step_user()
+
+    async def async_step_reconfigure(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Re-run the Netatmo login, e.g. so Netatmo links a newly set webhook URI."""
+        if user_input is None:
+            return self.async_show_form(step_id="reconfigure")
         return await self.async_step_user()
 
     async def async_step_home_select(self, user_input: dict | None = None) -> ConfigFlowResult:

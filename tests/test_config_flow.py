@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
-from homeassistant.config_entries import SOURCE_REAUTH
+from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 import pytest
 
 from custom_components.netatmo_custom import config_flow as cf
@@ -107,6 +107,57 @@ async def test_reauth_updates_existing_entry(hass, patch_api):
     assert result["data"]["home_id"] == "home-1"
     assert result["data"]["webhook_id"] == "wh"
     assert result["data"]["token"]["access_token"] == "new"
+
+
+def _flow_for_existing_entry(hass, source):
+    flow = _make_flow(hass)
+    flow.context = {"source": source, "entry_id": "entry-1"}
+    existing = MagicMock()
+    existing.data = {"home_id": "home-1", "webhook_id": "wh", "token": {"access_token": "old"}}
+    flow.hass.config_entries.async_get_entry = MagicMock(return_value=existing)
+    flow.async_update_reload_and_abort = MagicMock(
+        side_effect=lambda entry, **kwargs: {"type": "abort", **kwargs}
+    )
+    return flow
+
+
+async def test_reconfigure_updates_existing_entry(hass, patch_api):
+    """Reconfigure refreshes the token and keeps home_id/webhook_id."""
+    patch_api(homes=[{"id": "home-1", "name": "Test Home"}])
+    flow = _flow_for_existing_entry(hass, SOURCE_RECONFIGURE)
+    result = await flow.async_oauth_create_entry({"token": {"access_token": "new"}})
+    assert result["reason"] == "reconfigure_successful"
+    assert result["data"]["home_id"] == "home-1"
+    assert result["data"]["webhook_id"] == "wh"
+    assert result["data"]["token"]["access_token"] == "new"
+
+
+@pytest.mark.parametrize("source", [SOURCE_REAUTH, SOURCE_RECONFIGURE])
+async def test_reauth_reconfigure_wrong_account_aborts(hass, patch_api, source):
+    """Logging in with an account that doesn't own the home aborts."""
+    patch_api(homes=[{"id": "other-home", "name": "Other"}])
+    flow = _flow_for_existing_entry(hass, source)
+    result = await flow.async_oauth_create_entry({"token": {"access_token": "new"}})
+    assert result["type"] == "abort"
+    assert result["reason"] == "wrong_account"
+    flow.async_update_reload_and_abort.assert_not_called()
+
+
+async def test_reconfigure_shows_form(hass):
+    """The reconfigure step shows a confirm form first."""
+    flow = _make_flow(hass)
+    result = await flow.async_step_reconfigure()
+    assert result["type"] == "form"
+    assert result["step_id"] == "reconfigure"
+
+
+async def test_reconfigure_with_input_restarts_oauth(hass):
+    """Confirming reconfigure restarts the OAuth user step."""
+    flow = _make_flow(hass)
+    flow.async_step_user = AsyncMock(return_value={"type": "form", "step_id": "user"})
+    result = await flow.async_step_reconfigure({})
+    assert result["step_id"] == "user"
+    flow.async_step_user.assert_awaited_once()
 
 
 # --- SimpleTokenAPI (the raw token-validation client) ---

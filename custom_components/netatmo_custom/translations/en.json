@@ -14,6 +14,10 @@
       "reauth_confirm": {
         "title": "Reauthenticate Homelab Climate",
         "description": "The Netatmo integration needs to re-authenticate your account. Select Submit to continue."
+      },
+      "reconfigure": {
+        "title": "Reconnect Netatmo account",
+        "description": "Log in to Netatmo again to refresh the connection. Do this after setting the Webhook URI in your app on dev.netatmo.com so Netatmo starts sending webhook events. Select Submit to continue."
       }
     },
     "abort": {
@@ -22,6 +26,8 @@
       "auth_failed": "Authentication failed. Please try again.",
       "oauth_error": "OAuth authentication error",
       "reauth_successful": "Re-authentication was successful",
+      "reconfigure_successful": "Netatmo account reconnected successfully",
+      "wrong_account": "The configured home was not found in this Netatmo account. Log in with the same account that was used to set up the integration.",
       "unknown": "Unexpected error occurred"
     },
     "create_entry": {
