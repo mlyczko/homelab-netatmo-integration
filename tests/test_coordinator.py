@@ -7,10 +7,8 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 
 from custom_components.netatmo_custom.api import NetatmoAPIError, NetatmoAuthError
-from custom_components.netatmo_custom.coordinator import (
-    MIN_UPDATE_INTERVAL,
-    NetatmoDataUpdateCoordinator,
-)
+from custom_components.netatmo_custom.const import UPDATE_INTERVAL, WEBHOOK_UPDATE_INTERVAL
+from custom_components.netatmo_custom.coordinator import NetatmoDataUpdateCoordinator
 
 
 @pytest.fixture
@@ -74,13 +72,83 @@ async def test_failure_backs_off_interval(coordinator):
     assert coordinator.consecutive_failures == 0
 
 
-async def test_webhook_speeds_up_and_refreshes(coordinator):
-    """A webhook marks active, lowers the interval, and requests a refresh."""
+async def test_webhook_slows_polling_and_refreshes_in_background(hass, coordinator):
+    """A device event marks webhooks active, slows polling and schedules a refresh."""
     coordinator.async_request_refresh = AsyncMock()
-    await coordinator.async_handle_webhook({"push_type": "therm-mode"})
+    await coordinator.async_handle_webhook({"push_type": "device_event", "home_id": "home-1"})
+    await hass.async_block_till_done()
     assert coordinator.webhook_active is True
-    assert coordinator.update_interval.total_seconds() == MIN_UPDATE_INTERVAL
+    assert coordinator.update_interval.total_seconds() == WEBHOOK_UPDATE_INTERVAL
     coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_webhook_activation_does_not_refresh(hass, coordinator):
+    """webhook_activation only marks webhooks as active."""
+    coordinator.async_request_refresh = AsyncMock()
+    await coordinator.async_handle_webhook({"push_type": "webhook_activation"})
+    await hass.async_block_till_done()
+    assert coordinator.webhook_active is True
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+async def test_webhook_deletion_restores_polling(hass, coordinator):
+    """webhook_deletion falls back to the regular polling interval."""
+    coordinator.async_request_refresh = AsyncMock()
+    await coordinator.async_handle_webhook({"push_type": "webhook_activation"})
+    await coordinator.async_handle_webhook({"push_type": "webhook_deletion"})
+    assert coordinator.webhook_active is False
+    assert coordinator.update_interval.total_seconds() == UPDATE_INTERVAL
+
+
+async def test_webhook_for_other_home_ignored(hass, coordinator):
+    """Events for a different home don't trigger a refresh."""
+    coordinator.async_request_refresh = AsyncMock()
+    await coordinator.async_handle_webhook({"push_type": "device_event", "home_id": "other"})
+    await hass.async_block_till_done()
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+async def test_webhook_expires(coordinator, monkeypatch):
+    """Webhooks are considered inactive after the timeout."""
+    coordinator._last_webhook_at = 0.0
+    monkeypatch.setattr(
+        "custom_components.netatmo_custom.coordinator.time.monotonic", lambda: 10_000_000.0
+    )
+    assert coordinator.webhook_active is False
+
+
+async def test_successful_update_keeps_webhook_interval(coordinator):
+    """While webhooks are active, a successful poll keeps the slow interval."""
+    await coordinator.async_handle_webhook({"push_type": "webhook_activation"})
+    await coordinator._async_update_data()
+    assert coordinator.update_interval.total_seconds() == WEBHOOK_UPDATE_INTERVAL
+
+
+async def test_homes_data_is_cached(coordinator):
+    """homesdata is fetched once and reused across polls."""
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+    assert coordinator.api.async_get_homes_data.await_count == 1
+    assert coordinator.api.async_get_home_status.await_count == 2
+
+
+async def test_homes_data_refetched_after_expiry(coordinator):
+    """homesdata is re-fetched once the cache expires."""
+    await coordinator._async_update_data()
+    coordinator._homes_data_fetched_at = -1_000_000.0
+    await coordinator._async_update_data()
+    assert coordinator.api.async_get_homes_data.await_count == 2
+
+
+async def test_topology_webhook_invalidates_homes_data(hass, coordinator):
+    """topology_changed/home_event_changed force a homesdata re-fetch."""
+    await coordinator._async_update_data()
+    for push_type in ("topology_changed", "home_event_changed"):
+        coordinator.async_request_refresh = AsyncMock()
+        await coordinator.async_handle_webhook({"push_type": push_type})
+        await hass.async_block_till_done()
+        await coordinator._async_update_data()
+    assert coordinator.api.async_get_homes_data.await_count == 3
 
 
 async def test_is_data_stale(coordinator):

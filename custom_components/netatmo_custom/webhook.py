@@ -53,24 +53,22 @@ async def async_setup_webhook(
                 _LOGGER.warning("Rejecting oversized webhook payload (%d bytes)", len(body_bytes))
                 return web.Response(status=413, text="Payload too large")
 
-            # Verify signature using HMAC SHA256 over the raw body, when both the
-            # X-Netatmo-Secret header and a client secret are available. We do NOT
-            # reject unsigned requests (they only trigger an authenticated API
-            # refresh, never state injection) but we do reject bad signatures.
+            # Netatmo signs every message with HMAC-SHA256(client_secret, raw body).
             signature = request.headers.get("X-Netatmo-Secret")
-            if signature and client_secret:
+            if client_secret:
+                if not signature:
+                    _LOGGER.warning("Webhook request missing signature header")
+                    return web.Response(status=401, text="Missing signature")
                 expected_signature = hmac.new(
                     client_secret.encode("utf-8"),
                     body_bytes,
                     hashlib.sha256,
                 ).hexdigest()
-                if not hmac.compare_digest(expected_signature, signature):
+                if not hmac.compare_digest(expected_signature, signature.lower()):
                     _LOGGER.warning("Invalid webhook signature received")
                     return web.Response(status=403, text="Invalid signature")
-            elif not client_secret:
-                _LOGGER.debug("No client secret available; skipping signature check")
             else:
-                _LOGGER.debug("Webhook request missing signature header")
+                _LOGGER.debug("No client secret available; skipping signature check")
 
             # Parse the body without ever logging its contents.
             try:
@@ -81,10 +79,9 @@ async def async_setup_webhook(
 
             _LOGGER.debug("Webhook received: %s", data.get("push_type", "unknown"))
 
-            # Trigger an authoritative refresh from the API.
             await coordinator.async_handle_webhook(data)
 
-            # Respond 200 OK (Netatmo requires a response within 14 seconds).
+            # Netatmo requires a 200 within 5 seconds.
             return web.Response(status=200, text="OK")
 
         except Exception:

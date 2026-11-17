@@ -10,14 +10,22 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import NetatmoAPI, NetatmoAPIError, NetatmoAuthError
-from .const import DOMAIN, UPDATE_INTERVAL
+from .const import (
+    DOMAIN,
+    HOMESDATA_REFRESH_INTERVAL,
+    UPDATE_INTERVAL,
+    WEBHOOK_ACTIVE_TIMEOUT,
+    WEBHOOK_UPDATE_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 # Adaptive polling configuration
-MIN_UPDATE_INTERVAL = 30  # seconds (faster when active)
-MAX_UPDATE_INTERVAL = 300  # seconds (slower after failures)
+MAX_UPDATE_INTERVAL = 900  # seconds (slower after failures)
 FAILURE_BACKOFF_MULTIPLIER = 1.5
+
+# Webhook push types that mean the home structure (homesdata) may have changed
+TOPOLOGY_PUSH_TYPES = {"topology_changed", "home_event_changed"}
 
 
 class NetatmoDataUpdateCoordinator(DataUpdateCoordinator):
@@ -39,10 +47,39 @@ class NetatmoDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.api = api
         self.home_id = home_id
-        self.webhook_active = False
         self._consecutive_update_failures = 0
         self._last_successful_update: float | None = None
-        self._base_update_interval = UPDATE_INTERVAL
+        self._last_webhook_at: float | None = None
+        self._homes_data: dict[str, Any] | None = None
+        self._homes_data_fetched_at: float | None = None
+
+    @property
+    def webhook_active(self) -> bool:
+        """Return True if a webhook was received recently."""
+        return (
+            self._last_webhook_at is not None
+            and time.monotonic() - self._last_webhook_at < WEBHOOK_ACTIVE_TIMEOUT
+        )
+
+    @property
+    def _base_update_interval(self) -> int:
+        """Return the polling interval to use when healthy."""
+        return WEBHOOK_UPDATE_INTERVAL if self.webhook_active else UPDATE_INTERVAL
+
+    def invalidate_homes_data(self) -> None:
+        """Force homesdata to be re-fetched on the next update."""
+        self._homes_data_fetched_at = None
+
+    async def _async_get_homes_data(self) -> dict[str, Any]:
+        """Return cached homesdata, re-fetching it when expired or invalidated."""
+        if (
+            self._homes_data is None
+            or self._homes_data_fetched_at is None
+            or time.monotonic() - self._homes_data_fetched_at >= HOMESDATA_REFRESH_INTERVAL
+        ):
+            self._homes_data = await self.api.async_get_homes_data()
+            self._homes_data_fetched_at = time.monotonic()
+        return self._homes_data
 
     @property
     def consecutive_failures(self) -> int:
@@ -94,8 +131,7 @@ class NetatmoDataUpdateCoordinator(DataUpdateCoordinator):
             UpdateFailed: If update fails
         """
         try:
-            # Fetch both structure and status
-            homes_data = await self.api.async_get_homes_data()
+            homes_data = await self._async_get_homes_data()
             home_status = await self.api.async_get_home_status(self.home_id)
 
             # Successful update - check if we're recovering from failures
@@ -150,20 +186,43 @@ class NetatmoDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Unexpected error: {err}") from err
 
     async def async_handle_webhook(self, webhook_data: dict) -> None:
-        """Handle an incoming Netatmo webhook by triggering a fresh pull.
+        """Handle an incoming Netatmo webhook without blocking the HTTP response.
 
-        Netatmo webhooks are used purely as a "something changed" signal: we
-        speed up the poll interval and request an immediate refresh so the
-        authoritative state comes from the API rather than the (untrusted)
-        webhook payload.
+        Webhooks are used as a "something changed" signal; the authoritative
+        state is always pulled from the API. Netatmo requires a reply within
+        5 seconds, so the refresh runs in the background.
         """
-        self.webhook_active = True
-        self.update_interval = timedelta(seconds=MIN_UPDATE_INTERVAL)
-
         push_type = webhook_data.get("push_type")
         _LOGGER.debug("Received webhook event: %s", push_type)
 
-        await self.async_request_refresh()
+        if push_type == "webhook_deletion":
+            self._last_webhook_at = None
+            self.update_interval = timedelta(seconds=UPDATE_INTERVAL)
+            _LOGGER.info("Netatmo webhook unlinked; falling back to regular polling")
+            return
+
+        was_active = self.webhook_active
+        self._last_webhook_at = time.monotonic()
+        if not was_active:
+            _LOGGER.info(
+                "Netatmo webhooks active; reducing polling to every %ss",
+                WEBHOOK_UPDATE_INTERVAL,
+            )
+        if self._consecutive_update_failures == 0:
+            self.update_interval = timedelta(seconds=WEBHOOK_UPDATE_INTERVAL)
+
+        if push_type == "webhook_activation":
+            return
+
+        event_home_id = webhook_data.get("home_id")
+        if event_home_id and event_home_id != self.home_id:
+            return
+
+        if push_type in TOPOLOGY_PUSH_TYPES:
+            self.invalidate_homes_data()
+
+        # The coordinator's debouncer collapses bursts of events into one refresh.
+        self.hass.async_create_task(self.async_request_refresh())
 
     async def async_force_refresh(self) -> bool:
         """Force a refresh and return success status.

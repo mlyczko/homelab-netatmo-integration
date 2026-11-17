@@ -51,9 +51,14 @@ Custom Home Assistant integration for Netatmo Thermostats with enhanced local po
 
 ### Webhooks
 
-Upon initialization, the integration will register a webhook with Netatmo.
-Check the logs for the webhook URL to verify it's correct:
-`Settings -> System -> Logs`
+On startup the integration logs its webhook URL (`Settings -> System -> Logs`).
+To receive events:
+
+1. Paste that URL as the webhook URL in your app settings on [dev.netatmo.com](https://dev.netatmo.com/apps/).
+2. Re-authorize the integration (Netatmo links the webhook at authorization time).
+
+Once webhooks arrive, polling slows to every 5 minutes as a safety net; without them the
+integration polls every 60 seconds.
 
 ## Services
 

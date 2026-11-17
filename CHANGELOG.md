@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - fork release (mlyczko)
+
+Prepares for Netatmo's reduced polling rate limits (planned for March 1, 2027) by adopting the new
+Netatmo Connect webhooks.
+
+### Changed
+- Home structure (`homesdata`) is cached for an hour instead of fetched on every poll, halving API
+  calls. It is re-fetched immediately on `topology_changed` / `home_event_changed` webhooks.
+- While webhooks are being received, polling drops from every 60 s to every 5 min as a safety net.
+  Regular polling resumes after `webhook_deletion` or an hour without webhooks.
+- The webhook handler replies immediately and refreshes in the background (Netatmo requires a
+  response within 5 s).
+- Webhook events for other homes on the same account are ignored.
+
+### Security
+- Webhook requests without an `X-Netatmo-Secret` signature are now rejected (401).
 ## [1.3.3] - fork release (mlyczko)
 
 ### Changed

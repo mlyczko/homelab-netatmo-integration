@@ -91,13 +91,13 @@ async def test_unsigned_accepted_when_no_secret(hass):
     coordinator.async_handle_webhook.assert_awaited_once()
 
 
-async def test_missing_signature_header_still_accepted(hass, handler):
-    """A signed-mode webhook without the signature header is accepted (200)."""
+async def test_missing_signature_header_rejected(hass, handler):
+    """A signed-mode webhook without the signature header is rejected (401)."""
     fn, coordinator = handler
     body = json.dumps({"push_type": "therm-mode"}).encode()
     response = await fn(hass, WEBHOOK_ID, FakeRequest(body))  # no X-Netatmo-Secret
-    assert response.status == 200
-    coordinator.async_handle_webhook.assert_awaited_once()
+    assert response.status == 401
+    coordinator.async_handle_webhook.assert_not_awaited()
 
 
 async def test_unexpected_error_returns_200(hass, handler):

@@ -60,6 +60,9 @@ ENTITY_PREFIX = "netatmo"
 
 # Update intervals
 UPDATE_INTERVAL = 60  # seconds
+WEBHOOK_UPDATE_INTERVAL = 300  # safety-net poll while webhooks are delivering
+WEBHOOK_ACTIVE_TIMEOUT = 3600  # fall back to regular polling after this long without a webhook
+HOMESDATA_REFRESH_INTERVAL = 3600  # home structure rarely changes
 
 # Climate state-change verification (Netatmo can be slow to apply setpoints)
 VERIFY_PROPAGATION_DELAY = 4  # seconds to wait before re-reading after an API call
