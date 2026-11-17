@@ -357,7 +357,8 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
                 await api_call()
                 # Wait for state to propagate (Netatmo can be slow to apply setpoints)
                 await asyncio.sleep(VERIFY_PROPAGATION_DELAY)
-                await self.coordinator.async_request_refresh()
+                # Not async_request_refresh: its 10 s debounce can skip this fetch.
+                await self.coordinator.async_refresh()
                 await asyncio.sleep(VERIFY_SETTLE_DELAY)
 
                 if verification_func():
@@ -406,7 +407,7 @@ class NetatmoThermostat(CoordinatorEntity, ClimateEntity):
 
         if not success:
             # Force one more refresh attempt
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode."""

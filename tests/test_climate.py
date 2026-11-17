@@ -129,6 +129,7 @@ def _entity_with_api(home_status, homes_data, api=None, coordinator=None):
         coordinator.consecutive_failures = 0
         coordinator.api = api or MagicMock()
         coordinator.async_request_refresh = AsyncMock(return_value=None)
+        coordinator.async_refresh = AsyncMock(return_value=None)
     room = {"id": "room-1", "name": "Living Room"}
     module = {"id": "therm-1", "type": "NATherm1", "name": "Living Room"}
     return NetatmoThermostat(coordinator, room, "home-1", "Test Home", module, "plug-1")
@@ -217,6 +218,9 @@ async def test_verification_succeeds_first_attempt(home_status, homes_data, zero
     success = await entity._async_call_api_with_verification(api_call, lambda: True, "test")
     assert success is True
     assert api_call.await_count == 1
+    # Verification must bypass the debounced request_refresh.
+    entity.coordinator.async_refresh.assert_awaited_once()
+    entity.coordinator.async_request_refresh.assert_not_awaited()
 
 
 async def test_verification_retries_until_verified(home_status, homes_data, zero_delays):
@@ -394,7 +398,7 @@ async def test_set_temperature_refreshes_when_unverified(home_status, homes_data
     entity = _entity_with_api(home_status, homes_data, api=api)
     # 99.0 can never match the fixture's 20.0, so every verification attempt fails.
     await entity.async_set_temperature(temperature=99.0)
-    assert entity.coordinator.async_request_refresh.await_count >= 1
+    assert entity.coordinator.async_refresh.await_count >= 1
 
 
 async def test_set_hvac_mode_verifies_applied_mode(home_status, homes_data, zero_delays):

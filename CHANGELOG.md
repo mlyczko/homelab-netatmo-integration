@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - fork release (mlyczko)
+
+### Fixed
+- Verifying a change made from Home Assistant now always re-fetches state. Previously the
+  coordinator's 10 s refresh debounce could skip the fetch right after a webhook-triggered refresh,
+  failing verification and re-sending the command.
+
+### Docs
+- README: full webhook setup/verification guide, "How updates work" section, expanded webhook
+  troubleshooting, and updated diagnostics redaction notes.
+
 ## [1.4.1] - fork release (mlyczko)
 
 ### Added
